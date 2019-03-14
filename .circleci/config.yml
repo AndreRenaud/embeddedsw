@@ -1,0 +1,30 @@
+version: 2
+jobs:
+  build:
+    machine: true
+    steps:
+      - checkout
+      - run:
+          name: Construct Build Environment
+          command: docker build -t build_image .
+      - run:
+          name: Start Build Environment
+          command: docker run --volume "$(pwd):$(pwd)" --workdir "$(pwd)" --tty --detach build_image bash > container_id
+      - run:
+          name: Build FSBL
+          command: |
+                  docker exec $(cat container_id) make -C lib/sw_apps/zynqmp_fsbl/src "BOARD=zcu102" "PROC=a53" "A53_STATE=64"
+                  docker exec $(cat container_id) cp lib/sw_apps/zynqmp_fsbl/src/fsbl.elf fsbl.elf
+      - run:
+          name: Build PMUFW
+          command: |
+                  docker exec $(cat container_id) make -C lib/sw_apps/zynqmp_pmufw/src/
+                  docker exec $(cat container_id) cp lib/sw_apps/zynqmp_pmufw/src/executable.elf pmufw.elf
+      - run:
+          name: Stop Build Environment
+          command: docker stop $(cat container_id)
+          when: always
+      - store_artifacts:
+          path: fsbl.elf
+      - store_artifacts:
+          path: pmufw.elf
